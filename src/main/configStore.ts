@@ -1,7 +1,7 @@
 import Store from 'electron-store';
 // eslint-disable-next-line import/no-extraneous-dependencies
 import electron from 'electron';
-import { join, dirname } from 'path';
+import { join, dirname } from 'node:path';
 import { pathExists } from 'fs-extra';
 
 import { KeyBinding, Config } from '../../types.js';
@@ -83,6 +83,7 @@ const defaultKeyBindings: KeyBinding[] = [
 
   { keys: 'alt+up', action: 'increaseVolume' },
   { keys: 'alt+down', action: 'decreaseVolume' },
+  { keys: 'm', action: 'toggleMuted' },
 ];
 
 const defaults: Config = {

@@ -1,23 +1,22 @@
 import { CSSProperties, ReactNode, useState } from 'react';
-import { ArrowRightIcon, HelpIcon, TickCircleIcon, WarningSignIcon, InfoSignIcon, Checkbox, IconComponent } from 'evergreen-ui';
+import { ArrowRightIcon, HelpIcon, TickCircleIcon, WarningSignIcon, InfoSignIcon, IconComponent } from 'evergreen-ui';
 import i18n from 'i18next';
 import { Trans } from 'react-i18next';
-import withReactContent from 'sweetalert2-react-content';
 import SyntaxHighlighter from 'react-syntax-highlighter';
-import { tomorrow as syntaxStyle } from 'react-syntax-highlighter/dist/esm/styles/hljs';
+import { tomorrow as lightSyntaxStyle, tomorrowNight as darkSyntaxStyle } from 'react-syntax-highlighter/dist/esm/styles/hljs';
 import JSON5 from 'json5';
-import { SweetAlertOptions } from 'sweetalert2';
+import type { SweetAlertOptions } from 'sweetalert2';
 
 import { formatDuration } from '../util/duration';
-import Swal, { swalToastOptions, toast } from '../swal';
+import Swal, { ReactSwal, swalToastOptions, toast } from '../swal';
 import { parseYouTube } from '../edlFormats';
 import CopyClipboardButton from '../components/CopyClipboardButton';
+import Checkbox from '../components/Checkbox';
 import { isWindows, showItemInFolder } from '../util';
 import { ParseTimecode, SegmentBase } from '../types';
 
-const { dialog } = window.require('@electron/remote');
+const { dialog, shell } = window.require('@electron/remote');
 
-const ReactSwal = withReactContent(Swal);
 
 export async function promptTimeOffset({ initialValue, title, text, inputPlaceholder, parseTimecode }: { initialValue?: string | undefined, title: string, text?: string | undefined, inputPlaceholder: string, parseTimecode: ParseTimecode }) {
   const { value } = await Swal.fire({
@@ -46,9 +45,11 @@ export async function promptTimeOffset({ initialValue, title, text, inputPlaceho
 // https://github.com/mifi/lossless-cut/issues/1495
 export const showOpenDialog = async ({
   filters = isWindows ? [{ name: i18n.t('All Files'), extensions: ['*'] }] : undefined,
+  title,
   ...props
-  // @ts-expect-error todo
-}: Parameters<typeof dialog.showOpenDialog>[0]) => dialog.showOpenDialog({ ...props, filters });
+}: Omit<Parameters<typeof dialog.showOpenDialog>[0], 'title'> & { title: string }) => (
+  dialog.showOpenDialog({ ...props, title, ...(filters != null ? { filters } : {}) })
+);
 
 export async function askForYouTubeInput() {
   const example = i18n.t('YouTube video description\n00:00 Intro\n00:01 Chapter 2\n00:00:02.123 Chapter 3');
@@ -117,12 +118,12 @@ export async function askForFileOpenAction(inputOptions: Record<string, string>)
 
         {Object.entries(inputOptions).map(([key, text]) => (
           <button type="button" key={key} onClick={() => onClick(key)} className="button-unstyled" style={{ display: 'block', marginBottom: '.5em' }}>
-            <ArrowRightIcon color="rgba(0,0,0,0.5)" verticalAlign="middle" /> {text}
+            <ArrowRightIcon style={{ color: 'var(--gray10)' }} verticalAlign="middle" /> {text}
           </button>
         ))}
 
         <button type="button" onClick={() => onClick()} className="button-unstyled" style={{ display: 'block', marginTop: '.5em' }}>
-          <ArrowRightIcon color="rgba(150,0,0,1)" /> {i18n.t('Cancel')}
+          <ArrowRightIcon style={{ color: 'var(--red11)' }} /> {i18n.t('Cancel')}
         </button>
 
       </div>
@@ -388,18 +389,18 @@ const CleanupChoices = ({ cleanupChoicesInitial, onChange: onChangeProp }) => {
     <div style={{ textAlign: 'left' }}>
       <p>{i18n.t('What do you want to do after exporting a file or when pressing the "delete source file" button?')}</p>
 
-      <Checkbox label={i18n.t('Close currently opened file')} checked={closeFile} disabled={trashSourceFile || trashTmpFiles} onChange={(e) => onChange('closeFile', e.target.checked)} />
+      <Checkbox label={i18n.t('Close currently opened file')} checked={closeFile} disabled={trashSourceFile || trashTmpFiles} onCheckedChange={(checked) => onChange('closeFile', checked)} />
 
       <div style={{ marginTop: 25 }}>
-        <Checkbox label={i18n.t('Trash auto-generated files')} checked={trashTmpFiles} onChange={(e) => onChange('trashTmpFiles', e.target.checked)} />
-        <Checkbox label={i18n.t('Trash original source file')} checked={trashSourceFile} onChange={(e) => onChange('trashSourceFile', e.target.checked)} />
-        <Checkbox label={i18n.t('Trash project LLC file')} checked={trashProjectFile} onChange={(e) => onChange('trashProjectFile', e.target.checked)} />
-        <Checkbox label={i18n.t('Permanently delete the files if trash fails?')} disabled={!(trashTmpFiles || trashProjectFile || trashSourceFile)} checked={deleteIfTrashFails} onChange={(e) => onChange('deleteIfTrashFails', e.target.checked)} />
+        <Checkbox label={i18n.t('Trash auto-generated files')} checked={trashTmpFiles} onCheckedChange={(checked) => onChange('trashTmpFiles', checked)} />
+        <Checkbox label={i18n.t('Trash original source file')} checked={trashSourceFile} onCheckedChange={(checked) => onChange('trashSourceFile', checked)} />
+        <Checkbox label={i18n.t('Trash project LLC file')} checked={trashProjectFile} onCheckedChange={(checked) => onChange('trashProjectFile', checked)} />
+        <Checkbox label={i18n.t('Permanently delete the files if trash fails?')} disabled={!(trashTmpFiles || trashProjectFile || trashSourceFile)} checked={deleteIfTrashFails} onCheckedChange={(checked) => onChange('deleteIfTrashFails', checked)} />
       </div>
 
       <div style={{ marginTop: 25 }}>
-        <Checkbox label={i18n.t('Show this dialog every time?')} checked={askForCleanup} onChange={(e) => onChange('askForCleanup', e.target.checked)} />
-        <Checkbox label={i18n.t('Do all of this automatically after exporting a file?')} checked={cleanupAfterExport} onChange={(e) => onChange('cleanupAfterExport', e.target.checked)} />
+        <Checkbox label={i18n.t('Show this dialog every time?')} checked={askForCleanup} onCheckedChange={(checked) => onChange('askForCleanup', checked)} />
+        <Checkbox label={i18n.t('Do all of this automatically after exporting a file?')} checked={cleanupAfterExport} onCheckedChange={(checked) => onChange('cleanupAfterExport', checked)} />
       </div>
     </div>
   );
@@ -440,7 +441,7 @@ export async function createRandomSegments(fileDuration: number) {
 
   const { durationMin, durationMax, gapMin, gapMax } = response;
 
-  const randomInRange = (min, max) => min + Math.random() * (max - min);
+  const randomInRange = (min: number, max: number) => min + Math.random() * (max - min);
 
   const edl: SegmentBase[] = [];
   for (let start = randomInRange(gapMin, gapMax); start < fileDuration && edl.length < maxSegments; start += randomInRange(gapMin, gapMax)) {
@@ -538,12 +539,13 @@ export async function selectSegmentsByLabelDialog(currentName: string) {
   return value;
 }
 
-export async function selectSegmentsByExprDialog(inputValidator: (v: string) => string | undefined) {
+export async function selectSegmentsByExprDialog(inputValidator: (v: string) => Promise<string | undefined>) {
   const examples = {
     duration: { name: i18n.t('Segment duration less than 5 seconds'), code: 'segment.duration < 5' },
     start: { name: i18n.t('Segment starts after 00:60'), code: 'segment.start > 60' },
-    label: { name: i18n.t('Segment label'), code: "equalText(segment.label, 'My label')" },
-    tag: { name: i18n.t('Segment tag value'), code: "equalText(segment.tags.myTag, 'tag value')" },
+    label: { name: i18n.t('Segment label (exact)'), code: "segment.label === 'My label'" },
+    regexp: { name: i18n.t('Segment label (regexp)'), code: '/^My label/.test(segment.label)' },
+    tag: { name: i18n.t('Segment tag value'), code: "segment.tags.myTag === 'tag value'" },
   };
 
   function addExample(type: string) {
@@ -557,19 +559,15 @@ export async function selectSegmentsByExprDialog(inputValidator: (v: string) => 
     html: (
       <div style={{ textAlign: 'left' }}>
         <div style={{ marginBottom: '1em' }}>
-          {i18n.t('Enter an expression which will be evaluated for each segment. Segments for which the expression evaluates to "true" will be selected. For available syntax, see {{url}}.', { url: 'https://mathjs.org/' })}
+          <Trans>Enter a JavaScript expression which will be evaluated for each segment. Segments for which the expression evaluates to &quot;true&quot; will be selected. <button type="button" className="link-button" onClick={() => shell.openExternal('https://github.com/mifi/lossless-cut/blob/master/expressions.md')}>View available syntax.</button></Trans>
         </div>
 
-        <div><b>{i18n.t('Variables')}:</b></div>
-
-        <div style={{ marginBottom: '1em' }}>
-          segment.label, segment.start, segment.end, segment.duration
-        </div>
+        <div style={{ marginBottom: '1em' }}><b>{i18n.t('Variables')}:</b> segment.label, segment.start, segment.end, segment.duration, segment.tags.*</div>
 
         <div><b>{i18n.t('Examples')}:</b></div>
 
         {Object.entries(examples).map(([key, { name }]) => (
-          <button key={key} type="button" onClick={() => addExample(key)} className="button-unstyled" style={{ display: 'block', marginBottom: '.1em' }}>
+          <button key={key} type="button" onClick={() => addExample(key)} className="link-button" style={{ display: 'block', marginBottom: '.1em' }}>
             {name}
           </button>
         ))}
@@ -581,9 +579,9 @@ export async function selectSegmentsByExprDialog(inputValidator: (v: string) => 
   return value;
 }
 
-export function showJson5Dialog({ title, json }: { title: string, json: unknown }) {
+export function showJson5Dialog({ title, json, darkMode }: { title: string, json: unknown, darkMode: boolean }) {
   const html = (
-    <SyntaxHighlighter language="javascript" style={syntaxStyle} customStyle={{ textAlign: 'left', maxHeight: 300, overflowY: 'auto', fontSize: 14 }}>
+    <SyntaxHighlighter language="javascript" style={darkMode ? darkSyntaxStyle : lightSyntaxStyle} customStyle={{ textAlign: 'left', maxHeight: 300, overflowY: 'auto', fontSize: 14 }}>
       {JSON5.stringify(json, null, 2)}
     </SyntaxHighlighter>
   );
@@ -599,7 +597,7 @@ export async function openDirToast({ filePath, text, html, ...props }: SweetAler
   const swal = text ? toast : ReactSwal;
 
   // @ts-expect-error todo
-  const { value } = await swal.fire({
+  const { value } = await swal.fire<string>({
     ...swalToastOptions,
     showConfirmButton: true,
     confirmButtonText: i18n.t('Show'),
@@ -612,19 +610,31 @@ export async function openDirToast({ filePath, text, html, ...props }: SweetAler
   if (value) showItemInFolder(filePath);
 }
 
-const UnorderedList = ({ children }) => <ul style={{ paddingLeft: '1em' }}>{children}</ul>;
-// @ts-expect-error todo
-const ListItem = ({ icon: Icon, iconColor, children, style }: { icon: IconComponent, iconColor?: string, children: ReactNode, style?: CSSProperties }) => <li style={{ listStyle: 'none', ...style }}>{Icon && <Icon color={iconColor} size={14} marginRight=".3em" />} {children}</li>;
+const UnorderedList = ({ children }) => (
+  <ul style={{ paddingLeft: '1em' }}>{children}</ul>
+);
+const ListItem = ({ icon: Icon, iconColor, children, style }: { icon: IconComponent, iconColor?: string, children: ReactNode, style?: CSSProperties }) => (
+  <li style={{ listStyle: 'none', ...style }}>
+    {Icon && <Icon style={{ color: iconColor }} size={14} marginRight=".4em" />}
+    {children}
+  </li>
+);
 
-const Notices = ({ notices }) => notices.map((msg) => <ListItem key={msg} icon={InfoSignIcon} iconColor="info">{msg}</ListItem>);
-const Warnings = ({ warnings }) => warnings.map((msg) => <ListItem key={msg} icon={WarningSignIcon} iconColor="warning">{msg}</ListItem>);
-const OutputIncorrectSeeHelpMenu = () => <ListItem icon={HelpIcon}>{i18n.t('If output does not look right, see the Help menu.')}</ListItem>;
+const Notices = ({ notices }: { notices: string[] }) => notices.map((msg) => (
+  <ListItem key={msg} icon={InfoSignIcon} iconColor="var(--blue9)">{msg}</ListItem>
+));
+const Warnings = ({ warnings }: { warnings: string[] }) => warnings.map((msg) => (
+  <ListItem key={msg} icon={WarningSignIcon} iconColor="var(--orange8)">{msg}</ListItem>
+));
+const OutputIncorrectSeeHelpMenu = () => (
+  <ListItem icon={HelpIcon}>{i18n.t('If output does not look right, see the Help menu.')}</ListItem>
+);
 
-export async function openExportFinishedToast({ filePath, warnings, notices }) {
+export async function openExportFinishedToast({ filePath, warnings, notices }: { filePath: string, warnings: string[], notices: string[] }) {
   const hasWarnings = warnings.length > 0;
   const html = (
     <UnorderedList>
-      <ListItem icon={TickCircleIcon} iconColor={hasWarnings ? 'warning' : 'success'} style={{ fontWeight: 'bold' }}>{hasWarnings ? i18n.t('Export finished with warning(s)', { count: warnings.length }) : i18n.t('Export is done!')}</ListItem>
+      <ListItem icon={TickCircleIcon} iconColor={hasWarnings ? 'var(--orange8)' : 'var(--green11)'} style={{ fontWeight: 'bold' }}>{hasWarnings ? i18n.t('Export finished with warning(s)', { count: warnings.length }) : i18n.t('Export is done!')}</ListItem>
       <ListItem icon={InfoSignIcon}>{i18n.t('Please test the output file in your desired player/editor before you delete the source file.')}</ListItem>
       <OutputIncorrectSeeHelpMenu />
       <Notices notices={notices} />
@@ -632,10 +642,11 @@ export async function openExportFinishedToast({ filePath, warnings, notices }) {
     </UnorderedList>
   );
 
-  await openDirToast({ filePath, html, width: 800, position: 'center', timer: hasWarnings ? undefined : 30000 });
+  // https://github.com/mifi/lossless-cut/issues/2048
+  await openDirToast({ filePath, html, width: 800, position: 'center', timer: undefined });
 }
 
-export async function openConcatFinishedToast({ filePath, warnings, notices }) {
+export async function openConcatFinishedToast({ filePath, warnings, notices }: { filePath: string, warnings: string[], notices: string[] }) {
   const hasWarnings = warnings.length > 0;
   const html = (
     <UnorderedList>

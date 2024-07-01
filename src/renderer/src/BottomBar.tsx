@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { CSSProperties, Dispatch, SetStateAction, memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { MdRotate90DegreesCcw } from 'react-icons/md';
 import { useTranslation } from 'react-i18next';
@@ -23,15 +23,18 @@ import { useSegColors } from './contexts';
 import { isExactDurationMatch } from './util/duration';
 import useUserSettings from './hooks/useUserSettings';
 import { askForPlaybackRate } from './dialogs';
+import { ApparentCutSegment, FormatTimecode, ParseTimecode, SegmentToExport, StateSegment } from './types';
+import { WaveformMode } from '../../../types';
 
 const { clipboard } = window.require('electron');
 
 
-const zoomOptions = Array.from({ length: 13 }).fill().map((unused, z) => 2 ** z);
+const zoomOptions = Array.from({ length: 13 }).fill(undefined).map((_unused, z) => 2 ** z);
 
 const leftRightWidth = 100;
 
-const InvertCutModeButton = memo(({ invertCutSegments, setInvertCutSegments }) => {
+// eslint-disable-next-line react/display-name
+const InvertCutModeButton = memo(({ invertCutSegments, setInvertCutSegments }: { invertCutSegments: boolean, setInvertCutSegments: Dispatch<SetStateAction<boolean>> }) => {
   const { t } = useTranslation();
 
   const onYinYangClick = useCallback(() => {
@@ -63,15 +66,27 @@ const InvertCutModeButton = memo(({ invertCutSegments, setInvertCutSegments }) =
 });
 
 
-const CutTimeInput = memo(({ darkMode, cutTime, setCutTime, startTimeOffset, seekAbs, currentCutSeg, currentApparentCutSeg, isStart, formatTimecode, parseTimecode }) => {
+// eslint-disable-next-line react/display-name
+const CutTimeInput = memo(({ darkMode, cutTime, setCutTime, startTimeOffset, seekAbs, currentCutSeg, currentApparentCutSeg, isStart, formatTimecode, parseTimecode }: {
+  darkMode: boolean,
+  cutTime: number,
+  setCutTime: (type: 'start' | 'end', v: number) => void,
+  startTimeOffset: number,
+  seekAbs: (a: number) => void,
+  currentCutSeg: StateSegment,
+  currentApparentCutSeg: ApparentCutSegment,
+  isStart?: boolean,
+  formatTimecode: FormatTimecode,
+  parseTimecode: ParseTimecode,
+}) => {
   const { t } = useTranslation();
   const { getSegColor } = useSegColors();
 
-  const [cutTimeManual, setCutTimeManual] = useState();
+  const [cutTimeManual, setCutTimeManual] = useState<string>();
 
   // Clear manual overrides if upstream cut time has changed
   useEffect(() => {
-    setCutTimeManual();
+    setCutTimeManual(undefined);
   }, [setCutTimeManual, currentApparentCutSeg.start, currentApparentCutSeg.end]);
 
   const isCutTimeManualSet = () => cutTimeManual !== undefined;
@@ -81,7 +96,7 @@ const CutTimeInput = memo(({ darkMode, cutTime, setCutTime, startTimeOffset, see
     return `.1em solid ${darkMode ? segColor.desaturate(0.4).lightness(50).string() : segColor.desaturate(0.2).lightness(60).string()}`;
   }, [currentCutSeg, darkMode, getSegColor]);
 
-  const cutTimeInputStyle = {
+  const cutTimeInputStyle: CSSProperties = {
     border, borderRadius: 5, backgroundColor: 'var(--gray5)', transition: darkModeTransition, fontSize: 13, textAlign: 'center', padding: '1px 5px', marginTop: 0, marginBottom: 0, marginLeft: isStart ? 0 : 5, marginRight: isStart ? 5 : 0, boxSizing: 'border-box', fontFamily: 'inherit', width: 90, outline: 'none',
   };
 
@@ -90,7 +105,7 @@ const CutTimeInput = memo(({ darkMode, cutTime, setCutTime, startTimeOffset, see
     try {
       setCutTime(isStart ? 'start' : 'end', timeWithoutOffset);
       seekAbs(timeWithoutOffset);
-      setCutTimeManual();
+      setCutTimeManual(undefined);
     } catch (err) {
       console.error('Cannot set cut time', err);
       // If we get an error from setCutTime, remain in the editing state (cutTimeManual)
@@ -102,7 +117,7 @@ const CutTimeInput = memo(({ darkMode, cutTime, setCutTime, startTimeOffset, see
     e.preventDefault();
 
     // Don't proceed if not a valid time value
-    const timeWithOffset = parseTimecode(cutTimeManual);
+    const timeWithOffset = cutTimeManual != null ? parseTimecode(cutTimeManual) : undefined;
     if (timeWithOffset === undefined) return;
 
     trySetTime(timeWithOffset);
@@ -156,7 +171,7 @@ const CutTimeInput = memo(({ darkMode, cutTime, setCutTime, startTimeOffset, see
         title={isStart ? t('Manually input current segment\'s start time') : t('Manually input current segment\'s end time')}
         onChange={(e) => handleCutTimeInput(e.target.value)}
         onPaste={handleCutTimePaste}
-        onBlur={() => setCutTimeManual()}
+        onBlur={() => setCutTimeManual(undefined)}
         onContextMenu={handleContextMenu}
         value={isCutTimeManualSet()
           ? cutTimeManual
@@ -166,7 +181,7 @@ const CutTimeInput = memo(({ darkMode, cutTime, setCutTime, startTimeOffset, see
   );
 });
 
-const BottomBar = memo(({
+function BottomBar({
   zoom, setZoom, timelineToggleComfortZoom,
   isRotationSet, rotation, areWeCutting, increaseRotation, cleanupFilesDialog,
   captureSnapshot, onExportPress, segmentsToExport, hasVideo,
@@ -179,14 +194,62 @@ const BottomBar = memo(({
   toggleShowThumbnails, toggleWaveformMode, waveformMode, showThumbnails,
   outputPlaybackRate, setOutputPlaybackRate,
   formatTimecode, parseTimecode,
-}) => {
+}: {
+  zoom: number,
+  setZoom: Dispatch<SetStateAction<number>>,
+  timelineToggleComfortZoom: () => void,
+  isRotationSet: boolean,
+  rotation: number,
+  areWeCutting: boolean,
+  increaseRotation: () => void,
+  cleanupFilesDialog: () => void,
+  captureSnapshot: () => void,
+  onExportPress: () => void,
+  segmentsToExport: SegmentToExport[],
+  hasVideo: boolean,
+  seekAbs: (a: number) => void,
+  currentSegIndexSafe: number,
+  cutSegments: StateSegment[],
+  currentCutSeg: StateSegment,
+  setCutStart: () => void,
+  setCutEnd: () => void,
+  setCurrentSegIndex: Dispatch<SetStateAction<number>>,
+  jumpTimelineStart: () => void,
+  jumpTimelineEnd: () => void,
+  jumpCutEnd: () => void,
+  jumpCutStart: () => void,
+  startTimeOffset: number,
+  setCutTime: (type: 'start' | 'end', v: number) => void,
+  currentApparentCutSeg: ApparentCutSegment,
+  playing: boolean,
+  shortStep: (a: number) => void,
+  togglePlay: () => void,
+  toggleLoopSelectedSegments: () => void,
+  hasAudio: boolean,
+  keyframesEnabled: boolean,
+  toggleShowKeyframes: () => void,
+  seekClosestKeyframe: (a: number) => void,
+  detectedFps: number | undefined,
+  isFileOpened: boolean,
+  selectedSegments: ApparentCutSegment[],
+  darkMode: boolean,
+  setDarkMode: Dispatch<SetStateAction<boolean>>,
+  toggleShowThumbnails: () => void,
+  toggleWaveformMode: () => void,
+  waveformMode: WaveformMode | undefined,
+  showThumbnails: boolean,
+  outputPlaybackRate: number,
+  setOutputPlaybackRate: (v: number) => void,
+  formatTimecode: FormatTimecode,
+  parseTimecode: ParseTimecode,
+}) {
   const { t } = useTranslation();
   const { getSegColor } = useSegColors();
 
   // ok this is a bit over-engineered but what the hell!
   const loopSelectedSegmentsButtonStyle = useMemo(() => {
     // cannot have less than 1 gradient element:
-    const selectedSegmentsSafe = (selectedSegments.length > 1 ? selectedSegments : [selectedSegments[0], selectedSegments[0]]).slice(0, 10);
+    const selectedSegmentsSafe = (selectedSegments.length > 1 ? selectedSegments : [selectedSegments[0]!, selectedSegments[0]!]).slice(0, 10);
 
     const gradientColors = selectedSegmentsSafe.map((seg, i) => {
       const segColor = getSegColorRaw(seg);
@@ -231,7 +294,7 @@ const BottomBar = memo(({
     const opacity = seg ? undefined : 0.5;
     const text = seg ? `${newIndex + 1}` : '-';
     const wide = text.length > 1;
-    const segButtonStyle = {
+    const segButtonStyle: CSSProperties = {
       backgroundColor, opacity, padding: `6px ${wide ? 4 : 6}px`, borderRadius: 10, color: seg ? 'white' : undefined, fontSize: wide ? 12 : 14, width: 20, boxSizing: 'border-box', letterSpacing: -1, lineHeight: '10px', fontWeight: 'bold', margin: '0 6px',
     };
 
@@ -260,7 +323,7 @@ const BottomBar = memo(({
               {hasAudio && (
                 <GiSoundWaves
                   size={24}
-                  style={{ padding: '0 .1em', color: ['big-waveform', 'waveform'].includes(waveformMode) ? primaryTextColor : undefined }}
+                  style={{ padding: '0 .1em', color: waveformMode != null && ['big-waveform', 'waveform'].includes(waveformMode) ? primaryTextColor : undefined }}
                   role="button"
                   title={t('Show waveform')}
                   onClick={() => toggleWaveformMode()}
@@ -458,6 +521,6 @@ const BottomBar = memo(({
       </div>
     </>
   );
-});
+}
 
-export default BottomBar;
+export default memo(BottomBar);
